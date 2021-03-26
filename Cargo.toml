@@ -4,8 +4,25 @@ version = "0.1.0"
 authors = ["manuelvargastapia <manuelvargastapia@gmail.com>"]
 edition = "2018"
 
+# We need a binary (main.rs) and a library (lib.rs, that holds the app itself) 
+# to be able to share code between folders
+[lib]
+path = "src/lib.rs"
+
+# Not strictly required, but it gives us the full picture. We use [[bin]]
+# because it's an array, as we can have multiple binaries
+[[bin]]
+path = "src/main.rs"
+name = "zero2prod"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# We're using the beta release to get tokio 1.x.x
+# We're using the beta release to get tokio 1.x.x. With this, we gain access
+# to any tokio primitive
 actix-web = "4.0.0-beta.4"
+
+[dev-dependencies]
+actix-rt = "2.1.0"
+reqwest = "0.11.2"
+tokio = "1.4.0"
