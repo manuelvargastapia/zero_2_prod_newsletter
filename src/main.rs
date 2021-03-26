@@ -1,3 +1,5 @@
+use std::net::TcpListener;
+
 use zero2prod::run;
 
 // #[actix_web::main] is a procedural macro that allow running async code
@@ -12,5 +14,7 @@ use zero2prod::run;
 #[actix_web::main]
 /// The only job of main() is try to call run() depending on its [Result] (Ok or Error).
 async fn main() -> std::io::Result<()> {
-    run()?.await
+    let listener = TcpListener::bind("127.0.0.1:8000")
+        .expect("Failed to bind random port");
+    run(listener)?.await
 }
