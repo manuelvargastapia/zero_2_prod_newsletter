@@ -21,6 +21,9 @@ name = "zero2prod"
 # We're using the beta release to get tokio 1.x.x. With this, we gain access
 # to any tokio primitive
 actix-web = "4.0.0-beta.4"
+# We need the optional "derive" feature to use "serde"'s procedural macros:
+# "#[derive(Serialize)]" and "#[derive(Deserialize)]"
+serde = { version = "1.0.125", features = ["derive"]}
 
 [dev-dependencies]
 actix-rt = "2.1.0"
