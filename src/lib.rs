@@ -17,8 +17,8 @@ async fn health_check() -> HttpResponse {
 /// [subscribe] endpoint.
 #[derive(serde::Deserialize)]
 struct FormData {
-    email: String,
-    name: String,
+    _email: String,
+    _name: String,
 }
 
 /// Endpoint to add new user to newsletter.
