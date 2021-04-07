@@ -1,6 +1,6 @@
 use std::net::TcpListener;
 
-use zero2prod::run;
+use zero2prod::startup::run;
 
 // #[actix_web::main] is a procedural macro that allow running async code
 // in main(). After expand it with cargo-expand, we can see that indeed
