@@ -4,7 +4,7 @@ set -x
 set -eo pipefail
 
 # Check if a custom user has been set, otherwise default to 'postgres'
-DB_USER=${POSTGRES_USER:=postgres}
+DB_USER="${POSTGRES_USER:=postgres}"
 
 # Check if a custom password has been set, otherwise default to 'password'
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
@@ -18,8 +18,16 @@ DB_PORT="${POSTGRES_PORT:=5432}"
 # Allow to skip Docker if a dockerized Postgres database is already running
 if [[ -z "${SKIP_DOCKER}" ]]
 then
+    # if a postgres container is running, print instructions to kill it and exit
+    RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=postgres' --format '{{.ID}}')
+    if [[ -n $RUNNING_POSTGRES_CONTAINER ]]; then
+        echo >&2 "there is a postgres container already running, kill it with"
+        echo >&2 "    docker kill ${RUNNING_POSTGRES_CONTAINER}"
+        exit 1
+    fi
+
     # Launch postgres using Docker
-    docker run \
+    docker run --name "postgres_$(date '+%s')" \
     -e POSTGRES_USER=${DB_USER} \
     -e POSTGRES_PASSWORD=${DB_PASSWORD} \
     -e POSTGRES_DB=${DB_NAME} \
