@@ -18,6 +18,16 @@ pub struct DatabaseSettings {
     pub database_name: String,
 }
 
+impl DatabaseSettings {
+    /// Compose a string with connection params to connect to DB with `sqlx::PgConnection::connect`
+    pub fn generate_connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.database_name
+        )
+    }
+}
+
 /// Read configurations from top-level file
 pub fn get_configurations() -> Result<Configurations, config::ConfigError> {
     // Initialize configuration reader

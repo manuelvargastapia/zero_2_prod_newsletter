@@ -1,5 +1,8 @@
 use std::net::TcpListener;
 
+use sqlx::{Connection, PgConnection};
+
+use zero2prod::configuration::get_configurations;
 use zero2prod::startup::run;
 
 // `actix_rt::test` is the testing equivalent of `actix_web::main`
@@ -28,8 +31,7 @@ fn spawn_app() -> String {
     // to run the server. This allows us to avoid conflicts and run multiples tests
     // concurrently. A TcpListener is used to define the address and then return it to
     // be used by the HTTP client performing the call.
-    let listener =
-        TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
 
     let port = listener.local_addr().unwrap().port();
 
@@ -46,8 +48,13 @@ fn spawn_app() -> String {
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let app_address = spawn_app();
+    let configurations = get_configurations().expect("Failed to read configuration file.");
+    let connection_string = configurations.database.generate_connection_string();
+    let mut connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Progres.");
     let client = reqwest::Client::new();
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = "name=nicolas%20bourbaki&email=nick_bourbaki%40gmail.com";
 
     // Act
     let response = client
@@ -60,6 +67,19 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // Assert
     assert_eq!(200, response.status().as_u16());
+
+    // Verify
+
+    // This macro needs a DATABASE_URL env var defined, so we need to
+    // add a .env at top-level to compile this code. Note that it's
+    // pushed to repo, because we need it to run the CI pipeline
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to fetch saved subscription");
+
+    assert_eq!(saved.email, "nick_bourbaki@gmail.com");
+    assert_eq!(saved.name, "nicolas bourbaki");
 }
 
 // This is an example of table-driven test (aka parametrised test). It is particularly
@@ -89,10 +109,10 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 
         // Assert
         assert_eq!(
-                400,
-                response.status().as_u16(),
-                "The API did not fail with 400 Bad Request when the payload was {}.",
-                error_message
-            );
+            400,
+            response.status().as_u16(),
+            "The API did not fail with 400 Bad Request when the payload was {}.",
+            error_message
+        );
     }
 }
