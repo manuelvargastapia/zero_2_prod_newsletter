@@ -26,6 +26,18 @@ impl DatabaseSettings {
             self.username, self.password, self.host, self.port, self.database_name
         )
     }
+
+    /// Compose a string to connect to a Postgres instance, not a specific logical database.
+    ///
+    /// This function is useful to create isolated connections when running integration tests.
+    /// The connection will allow to create a database to run migrations and perform test
+    /// queries in individual test without being undeterministic.
+    pub fn generate_connection_string_without_db(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}",
+            self.username, self.password, self.host, self.port
+        )
+    }
 }
 
 /// Read configurations from top-level file

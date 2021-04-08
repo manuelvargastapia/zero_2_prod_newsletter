@@ -1,8 +1,9 @@
 use std::net::TcpListener;
 
-use sqlx::PgPool;
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use uuid::Uuid;
 
-use zero2prod::configuration::get_configurations;
+use zero2prod::configuration::{get_configurations, DatabaseSettings};
 use zero2prod::startup::run;
 
 // `actix_rt::test` is the testing equivalent of `actix_web::main`
@@ -41,10 +42,9 @@ async fn spawn_app() -> TestApp {
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
 
-    let configurations = get_configurations().expect("Failed to read configurations.");
-    let connection_pool = PgPool::connect(&configurations.database.generate_connection_string())
-        .await
-        .expect("Failed to connect to Postgres.");
+    let mut configurations = get_configurations().expect("Failed to read configurations.");
+    configurations.database.database_name = Uuid::new_v4().to_string();
+    let connection_pool = configure_database(&configurations.database).await;
 
     let server = run(listener, connection_pool.clone()).expect("Failed to bind address.");
 
@@ -56,6 +56,35 @@ async fn spawn_app() -> TestApp {
         address,
         db_pool: connection_pool,
     }
+}
+
+// Before each test we
+// (i) create a new logical database with a unique name and
+// (ii) run database migration on it.
+//
+// This is required to avoid using the same database connection for
+// all the test. That is, we need to isolate the test to be able able
+// to run it in a determistic way.
+pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
+    // Create database
+    let mut connection = PgConnection::connect(&config.generate_connection_string_without_db())
+        .await
+        .expect("Failed to connect to Postgres");
+    connection
+        .execute(&*format!(r#"CREATE DATABASE "{}";"#, config.database_name))
+        .await
+        .expect("Failed to create database.");
+
+    // Migrate database
+    let connection_pool = PgPool::connect(&config.generate_connection_string())
+        .await
+        .expect("Failed to connect to Postgres.");
+    sqlx::migrate!("./migrations") // Same macro used by sqlx-cli when executing sqlx migrate run
+        .run(&connection_pool)
+        .await
+        .expect("Failed to migrate the database.");
+
+    connection_pool
 }
 
 #[actix_rt::test]
