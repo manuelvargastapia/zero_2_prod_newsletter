@@ -1,5 +1,7 @@
 use std::net::TcpListener;
 
+use sqlx::PgPool;
+
 use zero2prod::{configuration::get_configurations, startup::run};
 
 // #[actix_web::main] is a procedural macro that allow running async code
@@ -16,8 +18,16 @@ use zero2prod::{configuration::get_configurations, startup::run};
 async fn main() -> std::io::Result<()> {
     // Load configurations from file before launching the server
     let configurations = get_configurations().expect("Failed to read configuration file.");
-    let address = format!("127.0.0.1:{}", configurations.application_port);
 
-    let listener = TcpListener::bind(address).expect("Failed to bind random port");
-    run(listener)?.await
+    // sqlx::PgPool is built around sqlx::PgConnection to handle multiple concurrent
+    // queries through a connection pool
+    let connection_pool = PgPool::connect(&configurations.database.generate_connection_string())
+        .await
+        .expect("Failed to connect to Postgres");
+
+    let address = format!("127.0.0.1:{}", configurations.application_port);
+    let listener = TcpListener::bind(address)?;
+
+    run(listener, connection_pool)?.await?;
+    Ok(())
 }
