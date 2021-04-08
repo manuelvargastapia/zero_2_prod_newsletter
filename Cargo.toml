@@ -25,6 +25,8 @@ actix-web = "4.0.0-beta.4"
 # "#[derive(Serialize)]" and "#[derive(Deserialize)]"
 serde = { version = "1.0.125", features = ["derive"]}
 config = "0.11.0"
+uuid = { version = "0.8.1", features = ["v4"] }
+chrono = "0.4.19"
 
 # Using table-like toml syntax to avoid a super-long line!
 [dependencies.sqlx]
