@@ -1,6 +1,6 @@
 use std::net::TcpListener;
 
-use sqlx::{Connection, PgConnection};
+use sqlx::PgPool;
 
 use zero2prod::configuration::get_configurations;
 use zero2prod::startup::run;
@@ -9,13 +9,13 @@ use zero2prod::startup::run;
 #[actix_rt::test]
 async fn health_check_works() {
     // Arrange
-    let address = spawn_app();
+    let test_app = spawn_app().await;
     // Create a HTTP client to perform calls to the endpoints under testing
     let client = reqwest::Client::new();
 
     // Act
     let response = client
-        .get(&format!("{}/health_check", &address))
+        .get(&format!("{}/health_check", &test_app.address))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -25,8 +25,13 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
+pub struct TestApp {
+    pub address: String,
+    pub db_pool: PgPool,
+}
+
 // Launch application in the background
-fn spawn_app() -> String {
+async fn spawn_app() -> TestApp {
     // A port = 0 means that the SO will automatically scan for a random available port
     // to run the server. This allows us to avoid conflicts and run multiples tests
     // concurrently. A TcpListener is used to define the address and then return it to
@@ -34,31 +39,35 @@ fn spawn_app() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
 
     let port = listener.local_addr().unwrap().port();
+    let address = format!("http://127.0.0.1:{}", port);
 
-    let server = run(listener).expect("Failed to bind address.");
+    let configurations = get_configurations().expect("Failed to read configurations.");
+    let connection_pool = PgPool::connect(&configurations.database.generate_connection_string())
+        .await
+        .expect("Failed to connect to Postgres.");
+
+    let server = run(listener, connection_pool.clone()).expect("Failed to bind address.");
 
     // Launch the server as a background task. tokio::spawn returns a handle to the
     // spawned future (althought we have no use for it here)
     tokio::spawn(server);
 
-    format!("http://127.0.0.1:{}", port)
+    TestApp {
+        address,
+        db_pool: connection_pool,
+    }
 }
 
 #[actix_rt::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
-    let app_address = spawn_app();
-    let configurations = get_configurations().expect("Failed to read configuration file.");
-    let connection_string = configurations.database.generate_connection_string();
-    let mut connection = PgConnection::connect(&connection_string)
-        .await
-        .expect("Failed to connect to Progres.");
+    let test_app = spawn_app().await;
     let client = reqwest::Client::new();
     let body = "name=nicolas%20bourbaki&email=nick_bourbaki%40gmail.com";
 
     // Act
     let response = client
-        .post(&format!("{}/subscriptions", &app_address))
+        .post(&format!("{}/subscriptions", &test_app.address))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(body)
         .send()
@@ -74,7 +83,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     // add a .env at top-level to compile this code. Note that it's
     // pushed to repo, because we need it to run the CI pipeline
     let saved = sqlx::query!("SELECT email, name FROM subscriptions")
-        .fetch_one(&mut connection)
+        .fetch_one(&test_app.db_pool)
         .await
         .expect("Failed to fetch saved subscription");
 
@@ -89,18 +98,18 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 #[actix_rt::test]
 async fn subscribe_returns_a_400_when_data_is_missing() {
     // Arrange
-    let app_address = spawn_app();
+    let test_app = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
-        ("name=le%20guin", "missing the email"),
-        ("email=ursula_le_guin%40gmail.com", "missing the name"),
+        ("name=nicolas%20bourbaki", "missing the email"),
+        ("email=nick_bourbaki%40gmail.com", "missing the name"),
         ("", "missing both name and email"),
     ];
 
     for (invalid_body, error_message) in test_cases {
         // Act
         let response = client
-            .post(&format!("{}/subscriptions", &app_address))
+            .post(&format!("{}/subscriptions", &test_app.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(invalid_body)
             .send()
