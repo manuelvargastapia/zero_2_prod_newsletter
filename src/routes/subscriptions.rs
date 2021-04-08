@@ -1,4 +1,7 @@
 use actix_web::{web, HttpResponse};
+use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
 
 /// Struct to model the inputed form data when sending a `POST` request through
 /// [subscribe] endpoint.
@@ -26,6 +29,34 @@ pub struct FormData {
 /// if it fails, then the corresponding error (`400 BAD REQUEST`) is returned to the
 /// caller and the handler is never invoked; when `from_request()` returns a
 /// [actix_web::Error] it can be converted to [HttpResponse].
-pub async fn subscribe(_form: web::Form<FormData>) -> HttpResponse {
-    HttpResponse::Ok().finish()
+///
+/// Similarly, the [web::Data] extractor allows us to get the connection pool from
+/// application state as defined in `run`. In other contexts, this could be referred
+/// as _dependency injection_.
+pub async fn subscribe(
+    form: web::Form<FormData>,
+    pool: web::Data<PgPool>,
+) -> Result<HttpResponse, HttpResponse> {
+    sqlx::query!(
+        r#"
+        INSERT INTO subscriptions (id, email, name, subscribed_at)
+        VALUES ($1, $2, $3, $4)
+        "#,
+        Uuid::new_v4(),
+        form.email,
+        form.name,
+        Utc::now()
+    )
+    // sqlx doesn't allow to run multiple queries concurrently over the same DB connection.
+    // That's why it requires a mutable reference (that is, a "unique" refence) to the
+    // connection. We can't get a mutable reference from web::Data, so we need to use
+    // something else, like PgPool in this case.
+    .execute(pool.as_ref())
+    .await
+    .map_err(|e| {
+        eprintln!("Failed to execute query: {}", e);
+        HttpResponse::InternalServerError().finish()
+    })?;
+
+    Ok(HttpResponse::Ok().finish())
 }
