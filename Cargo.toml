@@ -21,6 +21,25 @@ name = "zero2prod"
 # We're using the beta release to get tokio 1.x.x. With this, we gain access
 # to any tokio primitive
 actix-web = "4.0.0-beta.4"
+# We need the optional "derive" feature to use "serde"'s procedural macros:
+# "#[derive(Serialize)]" and "#[derive(Deserialize)]"
+serde = { version = "1.0.125", features = ["derive"]}
+config = "0.11.0"
+uuid = { version = "0.8.1", features = ["v4"] }
+chrono = "0.4.19"
+
+# Using table-like toml syntax to avoid a super-long line!
+[dependencies.sqlx]
+version = "0.5.1"
+default-features = false
+features = [
+    "runtime-actix-rustls", # use the "actix" runtime and "rustls" as TLS backend
+    "macros", # access to "sqlx::query!" and "sqlx::query_as!"
+    "postgres", # specific Postgress functionality
+    "uuid", # support for mapping SQL UUIDs to the Uuid type from the "uuid" crate
+    "chrono", # support for mapping SQL "timestamptz" to the "DateTime<T>" type from the "chrono" crate
+    "migrate" # same functions used by "sqlx-cli" to manage migrations
+]
 
 [dev-dependencies]
 actix-rt = "2.1.0"
