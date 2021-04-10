@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 /// Struct to model the inputed form data when sending a `POST` request through
@@ -37,6 +38,26 @@ pub async fn subscribe(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, HttpResponse> {
+    // We're using the tracing crate to print in terminal the logs captured
+    // by actix_web::middlewares::Logger.
+    // For correlate properly the logs (ex, when logging concurrent queries),
+    // we assign a uuid to each log to tracking them easily.
+    // Additionally, we use the info_span! macro to show the exact time window
+    // for the process being logged. The span is "exit" when _request_span_guard
+    // is dropped at the end of subscribe
+    let request_id = Uuid::new_v4();
+    let request_span = tracing::info_span!(
+        "Adding a new subscriber.",
+        %request_id,
+        email = %form.email,
+        name = %form.name
+    );
+    // Enter the span of request_span ()
+    let _request_span_guard = request_span.enter();
+
+    // Another way of intrumentation with instrument() from tracing_futures
+    let query_span = tracing::info_span!("Saving new subscriber details in the database");
+
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
@@ -52,11 +73,16 @@ pub async fn subscribe(
     // connection. We can't get a mutable reference from web::Data, so we need to use
     // something else, like PgPool in this case.
     .execute(pool.as_ref())
+    // Log every poll, that can be multiple, before resolving future.
+    // We pass a span as argument ans enters it every time self, the future,
+    // is polled; it exits the span every time the future is parked
+    .instrument(query_span)
     .await
     .map_err(|e| {
-        eprintln!("Failed to execute query: {}", e);
+        tracing::error!("Failed to execute query: {:?}", e);
         HttpResponse::InternalServerError().finish()
     })?;
 
+    tracing::info!("New subscriber detials have been saved");
     Ok(HttpResponse::Ok().finish())
 }
