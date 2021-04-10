@@ -1,6 +1,6 @@
 use std::{io::Error, net::TcpListener};
 
-use actix_web::{dev::Server, web, App, HttpServer};
+use actix_web::{dev::Server, middleware::Logger, web, App, HttpServer};
 use sqlx::PgPool;
 
 use crate::routes::{health_check, subscribe};
@@ -31,6 +31,7 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, Error> {
     // method calls one after the other to add features to the same App instance.
     let server = HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             // Register the connection pool as part of the application state
