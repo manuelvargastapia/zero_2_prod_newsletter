@@ -50,3 +50,4 @@ features = [
 actix-rt = "2.1.0"
 reqwest = "0.11.2"
 tokio = "1.4.0"
+lazy_static = "1.4.0"

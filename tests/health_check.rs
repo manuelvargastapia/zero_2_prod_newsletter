@@ -1,29 +1,26 @@
 use std::net::TcpListener;
 
+use lazy_static::lazy_static;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 
 use zero2prod::configuration::{get_configurations, DatabaseSettings};
 use zero2prod::startup::run;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
-// `actix_rt::test` is the testing equivalent of `actix_web::main`
-#[actix_rt::test]
-async fn health_check_works() {
-    // Arrange
-    let test_app = spawn_app().await;
-    // Create a HTTP client to perform calls to the endpoints under testing
-    let client = reqwest::Client::new();
-
-    // Act
-    let response = client
-        .get(&format!("{}/health_check", &test_app.address))
-        .send()
-        .await
-        .expect("Failed to execute request.");
-
-    // Assert
-    assert!(response.status().is_success());
-    assert_eq!(Some(0), response.content_length());
+// Ensure that the tracing stack is only initialised once.
+lazy_static! {
+    static ref TRACING: () = {
+        // If TEST_LOG is set, pick all the spans that are at least debug-level,
+        // otherwise, we drop everithing by passing an empty filter.
+        let filter = if std::env::var("TEST_LOG").is_ok() {
+            "debug"
+        } else {
+            ""
+        };
+        let subscriber = get_subscriber("test".into(), filter.into());
+        init_subscriber(subscriber);
+    };
 }
 
 pub struct TestApp {
@@ -33,6 +30,11 @@ pub struct TestApp {
 
 // Launch application in the background
 async fn spawn_app() -> TestApp {
+    // Set up tracing stack.
+    // The first time initialize is invoked the code in TRACING is executed.
+    // All other invocations will instead skip execution.
+    lazy_static::initialize(&TRACING);
+
     // A port = 0 means that the SO will automatically scan for a random available port
     // to run the server. This allows us to avoid conflicts and run multiples tests
     // concurrently. A TcpListener is used to define the address and then return it to
@@ -153,4 +155,24 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
             error_message
         );
     }
+}
+
+// `actix_rt::test` is the testing equivalent of `actix_web::main`
+#[actix_rt::test]
+async fn health_check_works() {
+    // Arrange
+    let test_app = spawn_app().await;
+    // Create a HTTP client to perform calls to the endpoints under testing
+    let client = reqwest::Client::new();
+
+    // Act
+    let response = client
+        .get(&format!("{}/health_check", &test_app.address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    assert_eq!(Some(0), response.content_length());
 }

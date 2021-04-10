@@ -2500,6 +2500,7 @@ dependencies = [
  "actix-web",
  "chrono",
  "config",
+ "lazy_static",
  "reqwest",
  "serde 1.0.125",
  "sqlx",
