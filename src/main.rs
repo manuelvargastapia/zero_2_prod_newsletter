@@ -29,11 +29,14 @@ async fn main() -> std::io::Result<()> {
 
     // sqlx::PgPool is built around sqlx::PgConnection to handle multiple concurrent
     // queries through a connection pool
-    let connection_pool = PgPool::connect(&configurations.database.generate_connection_string())
-        .await
-        .expect("Failed to connect to Postgres");
+    let connection_pool =
+        PgPool::connect_lazy(&configurations.database.generate_connection_string())
+            .expect("Failed to connect to Postgres");
 
-    let address = format!("127.0.0.1:{}", configurations.application_port);
+    let address = format!(
+        "{}:{}",
+        configurations.application.host, configurations.application.port
+    );
     let listener = TcpListener::bind(address)?;
 
     run(listener, connection_pool)?.await?;

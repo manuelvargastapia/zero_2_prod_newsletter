@@ -44,7 +44,8 @@ features = [
     "postgres", # specific Postgress functionality
     "uuid", # support for mapping SQL UUIDs to the Uuid type from the "uuid" crate
     "chrono", # support for mapping SQL "timestamptz" to the "DateTime<T>" type from the "chrono" crate
-    "migrate" # same functions used by "sqlx-cli" to manage migrations
+    "migrate", # same functions used by "sqlx-cli" to manage migrations
+    "offline" # use sqlx offline compile-time verification by creating a sqlx-data.json file. It requires running "cargo sqlx prepare"
 ]
 
 [dev-dependencies]
