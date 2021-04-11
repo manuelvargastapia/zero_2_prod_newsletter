@@ -2,6 +2,7 @@ use std::{io::Error, net::TcpListener};
 
 use actix_web::{dev::Server, web, App, HttpServer};
 use sqlx::PgPool;
+use tracing_actix_web::TracingLogger;
 
 use crate::routes::{health_check, subscribe};
 
@@ -31,6 +32,11 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, Error> {
     // method calls one after the other to add features to the same App instance.
     let server = HttpServer::new(move || {
         App::new()
+            // wrap() allows us to pass middlewares. TracingLogger is a
+            // tracing-based logger (as a replacement for log-based middlewares::Logger).
+            // This is required to easily add a request_id and other useful information
+            // to the logs
+            .wrap(TracingLogger)
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             // Register the connection pool as part of the application state

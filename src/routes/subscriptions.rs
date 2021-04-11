@@ -33,10 +33,46 @@ pub struct FormData {
 /// Similarly, the [web::Data] extractor allows us to get the connection pool from
 /// application state as defined in `run`. In other contexts, this could be referred
 /// as _dependency injection_.
+///
+/// ### Instrumentation
+///
+/// `#[tracing::instrument]` is a procedural macro that creates a span at the beginning
+/// of the function invocation. It automatically attaches all arguments passed to the function
+/// to the context of the span --in this case, `form` and `pool`. We use the `skipe` directive
+/// to no explicitely tell `tracing` to ignore them in logs. Also, the `fields` directive enriches
+/// the span's context --leverages the same syntax as `info_span!` macro.
+#[tracing::instrument(
+    name = "Adding a new subscriber",
+    skip(form, pool),
+    fields(
+        email = %form.email,
+        name = %form.name
+    )
+)]
 pub async fn subscribe(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, HttpResponse> {
+    // We're using the tracing crate to print in terminal the logs captured
+    // by actix_web::middlewares::Logger.
+    // For correlate properly the logs (ex, when logging concurrent queries),
+    // we assign a uuid to each log to tracking them easily.
+    // Additionally, we use the info_span! macro to show the exact time window
+    // for the process being logged. The span is "exit" when _request_span_guard
+    // is dropped at the end of subscribe
+
+    insert_subscriber(&pool, &form)
+        .await
+        .map_err(|_| HttpResponse::InternalServerError().finish())?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[tracing::instrument(
+    name = "Saving new subscriber details in the database",
+    skip(form, pool)
+)]
+pub async fn insert_subscriber(pool: &PgPool, form: &FormData) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
@@ -51,12 +87,12 @@ pub async fn subscribe(
     // That's why it requires a mutable reference (that is, a "unique" refence) to the
     // connection. We can't get a mutable reference from web::Data, so we need to use
     // something else, like PgPool in this case.
-    .execute(pool.as_ref())
+    .execute(pool)
     .await
     .map_err(|e| {
-        eprintln!("Failed to execute query: {}", e);
-        HttpResponse::InternalServerError().finish()
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
     })?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(())
 }
