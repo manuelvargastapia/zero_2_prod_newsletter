@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 
-use zero2prod::configuration::{get_configurations, DatabaseSettings};
+use zero2prod::configuration::{get_configurations, DatabaseConfigurations};
 use zero2prod::startup::run;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
@@ -67,9 +67,9 @@ async fn spawn_app() -> TestApp {
 // This is required to avoid using the same database connection for
 // all the test. That is, we need to isolate the test to be able able
 // to run it in a determistic way.
-pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
+pub async fn configure_database(config: &DatabaseConfigurations) -> PgPool {
     // Create database
-    let mut connection = PgConnection::connect(&config.generate_connection_string_without_db())
+    let mut connection = PgConnection::connect_with(&config.without_db())
         .await
         .expect("Failed to connect to Postgres");
     connection
@@ -78,7 +78,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .expect("Failed to create database.");
 
     // Migrate database
-    let connection_pool = PgPool::connect(&config.generate_connection_string())
+    let connection_pool = PgPool::connect_with(config.with_db())
         .await
         .expect("Failed to connect to Postgres.");
     sqlx::migrate!("./migrations") // Same macro used by sqlx-cli when executing sqlx migrate run
