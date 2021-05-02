@@ -3,6 +3,9 @@ use std::{
     env::current_dir,
 };
 
+use serde_aux::field_attributes::deserialize_number_from_string;
+use sqlx::postgres::PgConnectOptions;
+
 /// Struct that models our app-level configurations.
 ///
 /// We have two grous of configuration to handle: `actix-web` server
@@ -10,7 +13,7 @@ use std::{
 /// The `config` crate requires a struct.
 #[derive(serde::Deserialize)]
 pub struct Configurations {
-    pub database: DatabaseSettings,
+    pub database: DatabaseConfigurations,
     pub application: ApplicationConfigurations,
 }
 
@@ -25,38 +28,38 @@ pub struct Configurations {
 /// environment.
 #[derive(serde::Deserialize)]
 pub struct ApplicationConfigurations {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
 }
 
 #[derive(serde::Deserialize)]
-pub struct DatabaseSettings {
+pub struct DatabaseConfigurations {
     pub username: String,
     pub password: String,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
     pub database_name: String,
 }
 
-impl DatabaseSettings {
-    /// Compose a string with connection params to connect to DB with `sqlx::PgConnection::connect`
-    pub fn generate_connection_string(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.host, self.port, self.database_name
-        )
+impl DatabaseConfigurations {
+    /// Generate options to connect to a Postgres database.
+    pub fn with_db(&self) -> PgConnectOptions {
+        self.without_db().database(&self.database_name)
     }
 
-    /// Compose a string to connect to a Postgres instance, not a specific logical database.
+    /// Generate options to connect to a Postgres instance, not a specific logical database.
     ///
     /// This function is useful to create isolated connections when running integration tests.
     /// The connection will allow to create a database to run migrations and perform test
     /// queries in individual test without being undeterministic.
-    pub fn generate_connection_string_without_db(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}",
-            self.username, self.password, self.host, self.port
-        )
+    pub fn without_db(&self) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host(&self.host)
+            .username(&self.username)
+            .password(&self.password)
+            .port(self.port)
     }
 }
 
