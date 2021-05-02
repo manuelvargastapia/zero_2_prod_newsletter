@@ -5,7 +5,7 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, EnvFilter,
 
 /// Compose multiple layers into a `tracing`'s subscriber.
 ///
-/// # Implementation Notes
+/// ### Implementation Notes
 ///
 /// We're using `impl Subscriber` as return type toa void having to spell out
 /// the actual type of type of the returned subscriber.
