@@ -1,6 +1,6 @@
 use std::net::TcpListener;
 
-use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 
 use zero2prod::{
     configuration::get_configurations,
@@ -29,9 +29,7 @@ async fn main() -> std::io::Result<()> {
 
     // sqlx::PgPool is built around sqlx::PgConnection to handle multiple concurrent
     // queries through a connection pool
-    let connection_pool =
-        PgPool::connect_lazy(&configurations.database.generate_connection_string())
-            .expect("Failed to connect to Postgres");
+    let connection_pool = PgPoolOptions::new().connect_lazy_with(configurations.database.with_db());
 
     let address = format!(
         "{}:{}",
