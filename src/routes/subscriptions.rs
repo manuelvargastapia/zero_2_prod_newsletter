@@ -1,7 +1,11 @@
+use std::convert::TryInto;
+
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 
 /// Struct to model the inputed form data when sending a `POST` request through
 /// [subscribe] endpoint.
@@ -9,6 +13,17 @@ use uuid::Uuid;
 pub struct FormData {
     email: String,
     name: String,
+}
+
+/// USeful type conversion
+impl TryInto<NewSubscriber> for FormData {
+    type Error = String;
+
+    fn try_into(self) -> Result<NewSubscriber, Self::Error> {
+        let name = SubscriberName::parse(self.name)?;
+        let email = SubscriberEmail::parse(self.email)?;
+        Ok(NewSubscriber { email, name })
+    }
 }
 
 /// Endpoint to add new user to newsletter.
@@ -49,10 +64,7 @@ pub struct FormData {
         name = %form.name
     )
 )]
-pub async fn subscribe(
-    form: web::Form<FormData>,
-    pool: web::Data<PgPool>,
-) -> Result<HttpResponse, HttpResponse> {
+pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
     // We're using the tracing crate to print in terminal the logs captured
     // by actix_web::middlewares::Logger.
     // For correlate properly the logs (ex, when logging concurrent queries),
@@ -61,26 +73,36 @@ pub async fn subscribe(
     // for the process being logged. The span is "exit" when _request_span_guard
     // is dropped at the end of subscribe
 
-    insert_subscriber(&pool, &form)
-        .await
-        .map_err(|_| HttpResponse::InternalServerError().finish())?;
+    // `try_into()` takes care of the conversion fromraw data to domain
+    // model. Meanwhile `subscribe` remains in charge of generating the HTTP
+    // response to the incoming HTTP request.
+    let new_subscriber = match form.0.try_into() {
+        Ok(new_subscriber) => new_subscriber,
+        Err(_) => return HttpResponse::BadRequest().finish(),
+    };
 
-    Ok(HttpResponse::Ok().finish())
+    match insert_subscriber(&pool, &new_subscriber).await {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, pool)
+    skip(new_subscriber, pool)
 )]
-pub async fn insert_subscriber(pool: &PgPool, form: &FormData) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(
+    pool: &PgPool,
+    new_subscriber: &NewSubscriber,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscriber.email.as_ref(),
+        new_subscriber.name.as_ref(),
         Utc::now()
     )
     // sqlx doesn't allow to run multiple queries concurrently over the same DB connection.
