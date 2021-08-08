@@ -5,6 +5,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 
 use zero2prod::configuration::{get_configurations, DatabaseConfigurations};
+use zero2prod::email_client::EmailClient;
 use zero2prod::startup::run;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
@@ -48,7 +49,19 @@ async fn spawn_app() -> TestApp {
     configurations.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = configure_database(&configurations.database).await;
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address.");
+    // Build an `EmailClient` using `configuration`
+    let sender_email = configurations
+        .email_client
+        .sender()
+        .expect("Invalid sender email address");
+    let email_client = EmailClient::new(
+        configurations.email_client.base_url,
+        sender_email,
+        configurations.email_client.authorization_token,
+    );
+
+    let server =
+        run(listener, connection_pool.clone(), email_client).expect("Failed to bind address.");
 
     // Launch the server as a background task. tokio::spawn returns a handle to the
     // spawned future (althought we have no use for it here)

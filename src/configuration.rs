@@ -6,6 +6,8 @@ use std::{
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::PgConnectOptions;
 
+use crate::domain::SubscriberEmail;
+
 /// Struct that models our app-level configurations.
 ///
 /// We have two grous of configuration to handle: `actix-web` server
@@ -15,6 +17,7 @@ use sqlx::postgres::PgConnectOptions;
 pub struct Configurations {
     pub database: DatabaseConfigurations,
     pub application: ApplicationConfigurations,
+    pub email_client: EmailClientConfigurations,
 }
 
 /// Configurable portion of the running application address.
@@ -60,6 +63,19 @@ impl DatabaseConfigurations {
             .username(&self.username)
             .password(&self.password)
             .port(self.port)
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct EmailClientConfigurations {
+    pub base_url: String,
+    pub sender_email: String,
+    pub authorization_token: String,
+}
+
+impl EmailClientConfigurations {
+    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+        SubscriberEmail::parse(self.sender_email.clone())
     }
 }
 
