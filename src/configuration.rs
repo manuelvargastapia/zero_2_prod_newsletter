@@ -13,7 +13,7 @@ use crate::domain::SubscriberEmail;
 /// We have two grous of configuration to handle: `actix-web` server
 /// configurations (e. g., port) and database connection parameters.
 /// The `config` crate requires a struct.
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Configurations {
     pub database: DatabaseConfigurations,
     pub application: ApplicationConfigurations,
@@ -29,14 +29,14 @@ pub struct Configurations {
 /// values for fields that require customisation. Finally, the configurations
 /// depends on an environment variables, APP_ENVIRONMENT to determine the running
 /// environment.
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct ApplicationConfigurations {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct DatabaseConfigurations {
     pub username: String,
     pub password: String,
@@ -66,7 +66,7 @@ impl DatabaseConfigurations {
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct EmailClientConfigurations {
     pub base_url: String,
     pub sender_email: String,

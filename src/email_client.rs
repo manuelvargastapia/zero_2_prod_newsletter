@@ -10,15 +10,15 @@ pub struct EmailClient {
 }
 
 impl EmailClient {
-    pub fn new(base_url: String, sender: SubscriberEmail, authorization_token: String) -> Self {
+    pub fn new(base_url: &str, sender: SubscriberEmail, authorization_token: &str) -> Self {
         Self {
             http_client: Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .unwrap(),
-            base_url,
+            base_url: base_url.to_string(),
             sender,
-            authorization_token,
+            authorization_token: authorization_token.to_string(),
         }
     }
 
@@ -95,7 +95,7 @@ mod tests {
 
     /// Get a test instance of `EmailClient`.
     fn email_client(base_url: String) -> EmailClient {
-        EmailClient::new(base_url, email(), Faker.fake())
+        EmailClient::new(&base_url, email(), &Faker.fake::<String>())
     }
 
     struct SendEmailBodyMatcher;
