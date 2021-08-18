@@ -1,13 +1,17 @@
 use std::{io::Error, net::TcpListener};
 
-use actix_web::{dev::Server, web, App, HttpServer};
+use actix_web::{
+    dev::Server,
+    web::{self, Data},
+    App, HttpServer,
+};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tracing_actix_web::TracingLogger;
 
 use crate::{
     configuration::{Configurations, DatabaseConfigurations},
     email_client::EmailClient,
-    routes::{health_check, subscribe},
+    routes::{confirm, health_check, subscribe},
 };
 
 // App type that exposes the required data
@@ -36,7 +40,12 @@ impl Application {
         );
         let listener = TcpListener::bind(&address)?;
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, connection_pool, email_client)?;
+        let server = run(
+            listener,
+            connection_pool,
+            email_client,
+            configuration.application.base_url,
+        )?;
 
         Ok(Self { port, server })
     }
@@ -62,6 +71,12 @@ pub async fn get_connection_pool(
         .await
 }
 
+// We need to define a wrapper type in order to retrieve the URL
+// in the `subscribe`handler.
+// Retrieval from the context, in actix-web, is type-based: using
+// a raw `String`would expose us to conflicts.
+pub struct ApplicationBaseUrl(pub String);
+
 /// Create a [Server] and return [Result] to be handled by main().
 ///
 /// This approach allows us to write an integration testing that could create and kill
@@ -76,6 +91,7 @@ pub fn run(
     listener: TcpListener,
     db_pool: PgPool,
     email_client: EmailClient,
+    base_url: String,
 ) -> Result<Server, Error> {
     // actix-web's runtime model spin up a worker process for each available core
     // on the machine. Each worker runs its own copy of the app. Because of this,
@@ -85,6 +101,7 @@ pub fn run(
     let db_pool = web::Data::new(db_pool);
 
     let email_client = web::Data::new(email_client);
+    let base_url = Data::new(ApplicationBaseUrl(base_url));
 
     // HttpServer handles all "transport level" concerns.
     // First, establishes a connection with a client of the API. Then, an App
@@ -101,12 +118,14 @@ pub fn run(
             .wrap(TracingLogger)
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
+            .route("/subscriptions/confirm", web::get().to(confirm))
             // Register the connection pool as part of the application state
             // (later on accessible through actix_web::web::Data extractor
             // inside every route). We can use .data() and app_data(). The former
             // would add another Arc pointer on top of the existing one.
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
+            .app_data(base_url.clone())
     })
     .listen(listener)?
     .run();

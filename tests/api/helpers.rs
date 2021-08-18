@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
+use wiremock::MockServer;
 
 use zero2prod::configuration::{get_configurations, DatabaseConfigurations};
 use zero2prod::startup::{get_connection_pool, Application};
@@ -24,6 +25,8 @@ lazy_static! {
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
+    pub email_server: MockServer,
+    pub port: u16,
 }
 
 impl TestApp {
@@ -45,6 +48,9 @@ pub async fn spawn_app() -> TestApp {
     // All other invocations will instead skip execution.
     lazy_static::initialize(&TRACING);
 
+    // Launch a mock server to stand in for Postmark's API
+    let email_server = MockServer::start().await;
+
     // Randomise configurations to ensure test isolation
     let configurations = {
         let mut c = get_configurations().expect("Failed to read configurations.");
@@ -52,6 +58,10 @@ pub async fn spawn_app() -> TestApp {
         c.database.database_name = Uuid::new_v4().to_string();
         // Use a random OS port
         c.application.port = 0;
+
+        // Use the mock server as email API
+        c.email_client.base_url = email_server.uri();
+
         c
     };
 
@@ -62,18 +72,19 @@ pub async fn spawn_app() -> TestApp {
     let application = Application::build(configurations.clone())
         .await
         .expect("Failed to build application.");
-
-    let address = format!("http://127.0.0.1:{}", application.port());
+    let application_port = application.port();
 
     // Launch the server as a background task. tokio::spawn returns a handle to the
     // spawned future (althought we have no use for it here)
     tokio::spawn(application.run_until_stopped());
 
     TestApp {
-        address,
+        address: format!("http://127.0.0.1:{}", application_port),
+        port: application_port,
         db_pool: get_connection_pool(&configurations.database)
             .await
             .expect("Failed to connect to the database"),
+        email_server,
     }
 }
 
